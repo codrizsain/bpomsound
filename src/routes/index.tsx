@@ -94,6 +94,7 @@ function Index() {
       ctxRef.current.close();
       ctxRef.current = null;
     }
+    return undefined;
   }, [s.keepAlive, s.active, loaded]);
 
   // Wake lock
@@ -167,7 +168,7 @@ function Index() {
   }
 
   const upd = (d: number, p: Partial<DayCfg>) =>
-    setS((x) => ({ ...x, days: { ...x.days, [d]: { ...x.days[d], ...p } } }));
+    setS((x) => ({ ...x, days: { ...x.days, [d]: { ...x.days[d]!, ...p } as DayCfg } }));
 
   async function onFile(d: number, f?: File) {
     if (!f) return;
