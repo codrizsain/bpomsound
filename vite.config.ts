@@ -29,6 +29,8 @@ export default defineConfig({
         // and precache URLs are root-relative (not "client/...").
         outDir: "dist/client",
         workbox: {
+          globDirectory: "dist/client",
+          swDest: "dist/client/sw.js",
           clientsClaim: true,
           skipWaiting: true,
           cleanupOutdatedCaches: true,
