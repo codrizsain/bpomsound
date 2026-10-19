@@ -47,6 +47,18 @@ function Index() {
   const [playing, setPlaying] = useState<string | null>(null);
   const [guide, setGuide] = useState(false);
   const [log, setLog] = useState<string>("");
+  const [offline, setOffline] = useState(false);
+
+  useEffect(() => {
+    const upd = () => setOffline(!navigator.onLine);
+    upd();
+    window.addEventListener("online", upd);
+    window.addEventListener("offline", upd);
+    return () => {
+      window.removeEventListener("online", upd);
+      window.removeEventListener("offline", upd);
+    };
+  }, []);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
   const wakeRef = useRef<WakeLockSentinel | null>(null);
@@ -189,6 +201,12 @@ function Index() {
           <div className="flex-1">
             <p className="text-xs uppercase tracking-widest opacity-80">Badan Pengawas Obat dan Makanan</p>
             <h1 className="text-xl md:text-2xl font-extrabold">Sistem Sound Otomatis — Kantor BPOM Tanjung Balai</h1>
+            {offline && (
+              <p role="status" className="mt-1.5 inline-flex items-center gap-2 rounded-full bg-primary-foreground/15 px-3 py-1 text-xs font-semibold">
+                <span className="h-2 w-2 rounded-full bg-success" />
+                Mode: Offline (Siap beroperasi tanpa internet)
+              </p>
+            )}
           </div>
           <button onClick={() => setGuide(true)} className="rounded-lg border border-primary-foreground/40 px-4 py-2 text-sm font-semibold hover:bg-primary-foreground/10">
             Panduan
