@@ -25,6 +25,9 @@ export default defineConfig({
         devOptions: { enabled: false },
         manifest: false,
         filename: "sw.js",
+        // Emit the worker next to the browser assets so it is served at /sw.js
+        // and precache URLs are root-relative (not "client/...").
+        outDir: "dist/client",
         workbox: {
           clientsClaim: true,
           skipWaiting: true,
