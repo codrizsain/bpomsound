@@ -20,7 +20,7 @@ export const Route = createFileRoute("/")({
 const DAYS = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 const ORDER = [1, 2, 3, 4, 5, 6, 0];
 
-type DayCfg = { enabled: boolean; time: string; title: string; fileName?: string };
+type DayCfg = { enabled: boolean; time: string; title: string; fileName?: string | undefined };
 type Settings = { active: boolean; volume: number; keepAlive: boolean; wakeLock: boolean; days: Record<number, DayCfg> };
 
 const DEFAULTS: Settings = {
@@ -136,7 +136,7 @@ function Index() {
 
   async function play(day: number, auto = false) {
     stop();
-    const cfg = s.days[day];
+    const cfg = s.days[day]!;
     const blob = await getAudio(`day-${day}`);
     const stamp = new Date().toLocaleTimeString("id-ID");
     if (!blob) {
@@ -240,7 +240,7 @@ function Index() {
           <h2 className="text-2xl font-extrabold mb-4">Jadwal Mingguan</h2>
           <div className="grid gap-3">
             {ORDER.map((d) => {
-              const c = s.days[d];
+              const c = s.days[d]!;
               return (
                 <div key={d} className={`rounded-xl border bg-card p-4 grid gap-4 md:grid-cols-[140px_120px_1fr_auto] items-center ${today === d ? "ring-2 ring-primary" : ""} ${c.enabled ? "" : "opacity-60"}`}>
                   <div className="flex items-center gap-3">
