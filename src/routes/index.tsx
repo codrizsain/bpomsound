@@ -2,6 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { saveAudio, getAudio, deleteAudio } from "@/lib/audio-db";
 import { registerAppSW } from "@/lib/sw-register";
+import { Button } from "@/components/ui/button";
+import { Download, Upload, Play, Square, Pause, HelpCircle, ShieldCheck } from "lucide-react";
+import { DAYS, ORDER, DEFAULTS, SETTINGS_KEY as LS, normalizeSettings, type Settings, type DayCfg } from "@/lib/sound-settings";
+import { createBackup, readBackup, restoreBackup } from "@/lib/sound-backup";
+import bpomLogo from "@/assets/bpom-logo.png.asset.json";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -17,29 +22,6 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-const DAYS = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
-const ORDER = [1, 2, 3, 4, 5, 6, 0];
-
-type DayCfg = { enabled: boolean; time: string; title: string; fileName?: string | undefined };
-type Settings = { active: boolean; volume: number; keepAlive: boolean; wakeLock: boolean; days: Record<number, DayCfg> };
-
-const DEFAULTS: Settings = {
-  active: false,
-  volume: 0.8,
-  keepAlive: true,
-  wakeLock: false,
-  days: {
-    1: { enabled: true, time: "10:00", title: "Instrumen - Hymne Universitas Royal" },
-    2: { enabled: true, time: "10:00", title: "Instrumen - Indonesia Raya" },
-    3: { enabled: true, time: "10:00", title: "Instrumen - Mars Universitas Royal" },
-    4: { enabled: true, time: "10:00", title: "Instrumen Jalan" },
-    5: { enabled: false, time: "16:00", title: "Belum dipilih" },
-    6: { enabled: false, time: "16:00", title: "Belum dipilih" },
-    0: { enabled: false, time: "16:00", title: "Belum dipilih" },
-  },
-};
-const LS = "bpom-sound-settings";
-
 function Index() {
   const [s, setS] = useState<Settings>(DEFAULTS);
   const [loaded, setLoaded] = useState(false);
@@ -48,6 +30,10 @@ function Index() {
   const [guide, setGuide] = useState(false);
   const [log, setLog] = useState<string>("");
   const [offline, setOffline] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [pendingBackup, setPendingBackup] = useState<Awaited<ReturnType<typeof readBackup>> | null>(null);
+  const [saved, setSaved] = useState(false);
+  const operationRef = useRef(0);
 
   useEffect(() => {
     const upd = () => setOffline(!navigator.onLine);
@@ -69,7 +55,7 @@ function Index() {
       const raw = localStorage.getItem(LS);
       if (raw) {
         const p = JSON.parse(raw);
-        setS({ ...DEFAULTS, ...p, days: { ...DEFAULTS.days, ...p.days } });
+        setS(normalizeSettings(p));
       } else setGuide(true);
     } catch {}
     setLoaded(true);
@@ -80,7 +66,10 @@ function Index() {
   }, []);
 
   useEffect(() => {
-    if (loaded) localStorage.setItem(LS, JSON.stringify(s));
+    if (loaded) {
+      try { localStorage.setItem(LS, JSON.stringify(s)); setSaved(true); }
+      catch { setSaved(false); setLog("Pengaturan gagal disimpan. Unduh cadangan sebelum menutup aplikasi."); }
+    }
     if (audioRef.current) audioRef.current.volume = s.volume;
   }, [s, loaded]);
 
@@ -149,8 +138,13 @@ function Index() {
 
   async function play(day: number, auto = false) {
     stop();
-    const cfg = s.days[day]!;
-    const blob = await getAudio(`day-${day}`);
+    const cfg = s.days[day];
+    if (!cfg) return;
+    const operation = operationRef.current;
+    let blob: Blob | undefined;
+    try { blob = await getAudio(`day-${day}`); }
+    catch { setLog("Audio tidak dapat dibaca dari penyimpanan perangkat."); return; }
+    if (operation !== operationRef.current) return;
     const stamp = new Date().toLocaleTimeString("id-ID");
     if (!blob) {
       chime();
@@ -159,7 +153,7 @@ function Index() {
     }
     const a = new Audio(URL.createObjectURL(blob));
     a.volume = s.volume;
-    a.onended = () => setPlaying(null);
+    a.onended = () => { if (audioRef.current === a) stop(); };
     audioRef.current = a;
     try {
       await a.play();
@@ -171,6 +165,7 @@ function Index() {
   }
 
   function stop() {
+    operationRef.current += 1;
     if (audioRef.current) {
       audioRef.current.pause();
       URL.revokeObjectURL(audioRef.current.src);
@@ -180,12 +175,49 @@ function Index() {
   }
 
   const upd = (d: number, p: Partial<DayCfg>) =>
-    setS((x) => ({ ...x, days: { ...x.days, [d]: { ...x.days[d]!, ...p } as DayCfg } }));
+    setS((x) => { const cfg = x.days[d]; return cfg ? { ...x, days: { ...x.days, [d]: { ...cfg, ...p } } } : x; });
 
   async function onFile(d: number, f?: File) {
     if (!f) return;
-    await saveAudio(`day-${d}`, f);
-    upd(d, { fileName: f.name, title: f.name.replace(/\.[^.]+$/, "") });
+    try {
+      await saveAudio(`day-${d}`, f);
+      upd(d, { fileName: f.name, title: f.name });
+      setLog(`${DAYS[d]} — ${f.name} tersimpan di perangkat ini.`);
+      if (navigator.storage?.persist) void navigator.storage.persist().catch(() => {});
+    } catch { setLog("Audio gagal disimpan. Periksa ruang penyimpanan perangkat dan coba kembali."); }
+  }
+
+  async function downloadBackup() {
+    setBackupBusy(true);
+    try {
+      const bytes = await createBackup(s);
+      const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "application/zip" }));
+      const link = document.createElement("a");
+      link.href = url; link.download = `Cadangan-Sound-BPOM-${new Date().toISOString().slice(0, 10)}.zip`;
+      link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setLog("Cadangan jadwal dan audio berhasil diunduh.");
+    } catch { setLog("Cadangan gagal dibuat. Coba kembali sebelum menutup aplikasi."); }
+    finally { setBackupBusy(false); }
+  }
+
+  async function selectBackup(file?: File) {
+    if (!file) return;
+    setBackupBusy(true);
+    try { setPendingBackup(await readBackup(file)); }
+    catch { setLog("Cadangan tidak valid atau audio tidak lengkap. Data lama tidak diubah."); }
+    finally { setBackupBusy(false); }
+  }
+
+  async function confirmRestore() {
+    if (!pendingBackup) return;
+    setBackupBusy(true);
+    stop();
+    try {
+      const settings = await restoreBackup(pendingBackup);
+      setS(settings); setPendingBackup(null);
+      setLog("Jadwal dan seluruh audio berhasil dipulihkan di perangkat ini.");
+    } catch { setLog("Pemulihan gagal. Periksa ruang penyimpanan lalu coba kembali."); }
+    finally { setBackupBusy(false); }
   }
 
   const time = now ? now.toLocaleTimeString("id-ID", { hour12: false }).replace(/\./g, ":") : "--:--:--";
@@ -196,11 +228,11 @@ function Index() {
     <div className="min-h-screen bg-background font-sans">
       <div className="h-1.5 flex"><div className="flex-1 bg-destructive" /><div className="flex-1 bg-card" /><div className="flex-1 bg-primary" /></div>
       <header className="bg-primary text-primary-foreground">
-        <div className="mx-auto max-w-6xl px-6 py-5 flex items-center gap-4">
-          <img src="/favicon.png" alt="" width={44} height={44} className="rounded-lg" />
-          <div className="flex-1">
-            <p className="text-xs uppercase tracking-widest opacity-80">Badan Pengawas Obat dan Makanan</p>
-            <h1 className="text-xl md:text-2xl font-extrabold">Sistem Sound Otomatis — Kantor BPOM Tanjung Balai</h1>
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-5 flex flex-wrap items-center gap-4">
+          <div className="shrink-0 rounded-lg bg-card p-2"><img src={bpomLogo.url} alt="Logo Badan POM" width={64} height={60} className="h-14 w-16 object-contain" /></div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs uppercase opacity-80">Badan Pengawas Obat dan Makanan</p>
+            <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold">Sistem Sound Otomatis Kantor BPOM Tanjung Balai</h1>
             {offline && (
               <p role="status" className="mt-1.5 inline-flex items-center gap-2 rounded-full bg-primary-foreground/15 px-3 py-1 text-xs font-semibold">
                 <span className="h-2 w-2 rounded-full bg-success" />
@@ -208,41 +240,41 @@ function Index() {
               </p>
             )}
           </div>
-          <button onClick={() => setGuide(true)} className="rounded-lg border border-primary-foreground/40 px-4 py-2 text-sm font-semibold hover:bg-primary-foreground/10">
-            Panduan
-          </button>
+          <Button onClick={() => setGuide(true)} variant="outline" className="border-primary-foreground/40 bg-transparent text-primary-foreground">
+            <HelpCircle /> Panduan
+          </Button>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-8 space-y-8">
+      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-8 space-y-8">
         <section className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-          <div className="rounded-2xl bg-card border p-8 shadow-sm">
+          <div className="rounded-lg bg-card border p-4 sm:p-8 shadow-sm">
             <p className="text-muted-foreground font-semibold capitalize">{date}</p>
-            <p className="font-mono text-6xl md:text-8xl font-bold text-primary tabular-nums tracking-tight my-2">{time}</p>
+            <p className="font-mono text-4xl sm:text-6xl lg:text-7xl font-bold text-primary tabular-nums my-3 whitespace-nowrap">{time}</p>
             <div className="flex items-center gap-3 mt-4">
-              <span className={`h-4 w-4 rounded-full ${s.active ? "bg-success animate-pulse" : "bg-muted-foreground/40"}`} />
+              <span className={`h-4 w-4 rounded-full ${s.active ? "bg-success motion-safe:animate-pulse" : "bg-muted-foreground/40"}`} />
               <span className="text-lg font-bold">
                 {s.active ? "AKTIF — Standby menunggu jadwal" : "NONAKTIF — Jadwal tidak berjalan"}
               </span>
             </div>
             {today !== undefined && s.days[today]?.enabled && (
-              <p className="mt-2 text-muted-foreground">Jadwal hari ini: <b className="text-foreground">{s.days[today].time}</b> — {s.days[today].title}</p>
+              <p className="mt-2 text-muted-foreground break-all">Jadwal hari ini: <b className="text-foreground">{s.days[today].time}</b> — {s.days[today].title}</p>
             )}
-            {playing && <p className="mt-3 rounded-lg bg-accent px-4 py-2 font-semibold text-accent-foreground">▶ Sedang diputar: {playing}</p>}
-            {log && <p className="mt-3 text-sm text-muted-foreground">{log}</p>}
+            {playing && <p className="mt-3 rounded-lg bg-accent px-4 py-2 font-semibold text-accent-foreground break-all">▶ Sedang diputar: {playing}</p>}
+            {log && <p role="status" className="mt-3 text-sm text-muted-foreground break-all">{log}</p>}
           </div>
 
           <div className="flex flex-col gap-4">
-            <button
+            <Button
               onClick={() => setS((x) => ({ ...x, active: !x.active }))}
-              className={`rounded-2xl py-6 text-xl font-extrabold shadow-sm transition ${s.active ? "bg-secondary text-secondary-foreground border-2 border-primary" : "bg-primary text-primary-foreground hover:opacity-90"}`}
+              className={`h-auto min-h-20 whitespace-normal rounded-lg px-4 py-5 text-lg font-extrabold shadow-sm transition ${s.active ? "bg-secondary text-secondary-foreground border-2 border-primary" : "bg-primary text-primary-foreground hover:opacity-90"}`}
             >
-              {s.active ? "⏸ Matikan Jadwal" : "▶ Aktifkan Jadwal Otomatis"}
-            </button>
-            <button onClick={stop} className="rounded-2xl bg-destructive py-8 text-2xl font-extrabold text-destructive-foreground shadow-lg hover:opacity-90 active:scale-[0.98]">
-              ■ STOP AUDIO SEKARANG
-            </button>
-            <div className="rounded-2xl border bg-card p-5 space-y-4">
+              {s.active ? <Pause /> : <Play />} {s.active ? "Matikan Jadwal" : "Aktifkan Jadwal Otomatis"}
+            </Button>
+            <Button onClick={stop} variant="destructive" className="h-auto min-h-24 whitespace-normal rounded-lg px-4 py-6 text-xl font-extrabold">
+              <Square /> STOP AUDIO SEKARANG
+            </Button>
+            <div className="rounded-lg border bg-card p-5 space-y-4">
               <label className="block">
                 <span className="font-semibold">Volume: {Math.round(s.volume * 100)}%</span>
                 <input type="range" min={0} max={1} step={0.05} value={s.volume}
@@ -259,41 +291,70 @@ function Index() {
           <h2 className="text-2xl font-extrabold mb-4">Jadwal Mingguan</h2>
           <div className="grid gap-3">
             {ORDER.map((d) => {
-              const c = s.days[d]!;
+              const c = s.days[d];
+               if (!c) return null;
               return (
-                <div key={d} className={`rounded-xl border bg-card p-4 grid gap-4 md:grid-cols-[140px_120px_1fr_auto] items-center ${today === d ? "ring-2 ring-primary" : ""} ${c.enabled ? "" : "opacity-60"}`}>
+                <div key={d} className={`rounded-lg border bg-card p-4 grid gap-4 sm:grid-cols-[140px_1fr] lg:grid-cols-[140px_120px_minmax(0,1fr)_auto] items-center ${today === d ? "ring-2 ring-primary" : ""} ${c.enabled ? "" : "opacity-60"}`}>
                   <div className="flex items-center gap-3">
-                    <Switch checked={c.enabled} onChange={(v) => upd(d, { enabled: v })} />
+                    <Switch label={`Jadwal ${DAYS[d]}`} checked={c.enabled} onChange={(v) => upd(d, { enabled: v })} />
                     <span className="font-bold text-lg">{DAYS[d]}</span>
                   </div>
-                  <input type="time" value={c.time} onChange={(e) => upd(d, { time: e.target.value })}
-                    className="rounded-lg border border-input bg-background px-3 py-2 font-mono text-lg font-bold" />
+                  <input type="time" aria-label={`Jam ${DAYS[d]}`} value={c.time} onChange={(e) => upd(d, { time: e.target.value })}
+                    className="min-w-0 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-lg font-bold" />
                   <div className="min-w-0">
-                    <p className="font-semibold truncate">{c.title}</p>
-                    <div className="flex gap-3 items-center text-sm">
+                    <p className="font-semibold break-all">{c.fileName ?? "Belum ada audio"}</p>
+                    <div className="flex flex-wrap gap-3 items-center text-sm">
                       <label className="cursor-pointer text-primary font-semibold hover:underline">
                         {c.fileName ? "Ganti file audio" : "Pilih file audio…"}
-                        <input type="file" accept="audio/*" className="hidden" onChange={(e) => onFile(d, e.target.files?.[0])} />
+                        <input type="file" aria-label={`Audio ${DAYS[d]}`} accept="audio/*" className="hidden" onChange={(e) => onFile(d, e.target.files?.[0])} />
                       </label>
                       {c.fileName ? (
-                        <button className="text-destructive hover:underline" onClick={async () => { await deleteAudio(`day-${d}`); upd(d, { fileName: undefined }); }}>Hapus</button>
+                        <Button variant="ghost" className="h-auto p-0 text-destructive hover:underline" onClick={async () => { try { await deleteAudio(`day-${d}`); upd(d, { fileName: undefined, title: "Belum ada audio" }); } catch { setLog("Audio gagal dihapus. Coba kembali."); } }}>Hapus</Button>
                       ) : <span className="text-muted-foreground">(belum ada file)</span>}
                     </div>
                   </div>
-                  <button onClick={() => play(d)} className="rounded-lg bg-secondary px-5 py-3 font-bold text-secondary-foreground hover:bg-accent">
-                    ▶ Test Putar
-                  </button>
+                  <Button onClick={() => play(d)} variant="secondary" className="h-12 px-5 font-bold">
+                    <Play /> Test Putar
+                  </Button>
                 </div>
               );
             })}
           </div>
         </section>
-        <p className="text-center text-sm text-muted-foreground">Semua pengaturan & file audio tersimpan otomatis di komputer ini dan bekerja tanpa internet.</p>
+        <section className="border-t pt-6 space-y-4">
+          <div className="flex flex-wrap justify-between gap-4 items-center">
+            <h2 className="text-xl font-extrabold">Cadangan Jadwal & Audio</h2>
+            <div className="flex flex-wrap gap-3">
+              <Button disabled={!loaded || backupBusy} onClick={downloadBackup}><Download /> Unduh Cadangan</Button>
+              <Button asChild variant="outline" disabled={backupBusy}>
+                <label className={backupBusy ? "pointer-events-none opacity-50" : "cursor-pointer"}>
+                  <Upload /> Pulihkan Cadangan
+                  <input type="file" aria-label="File cadangan" accept=".zip,application/zip" className="hidden" disabled={backupBusy} onChange={(e) => { void selectBackup(e.target.files?.[0]); e.target.value = ""; }} />
+                </label>
+              </Button>
+            </div>
+          </div>
+          <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><ShieldCheck className="h-4 w-4 shrink-0" />{backupBusy ? "Memproses cadangan…" : saved ? "Jadwal tersimpan otomatis di perangkat ini." : "Menyiapkan penyimpanan…"}</p>
+          <p className="text-sm text-muted-foreground">Audio dan jadwal tetap tersimpan setelah aplikasi ditutup. Cadangan dapat dipulihkan di perangkat lain tanpa internet. Hindari menghapus data situs atau memakai mode privat.</p>
+          <p className="text-sm text-muted-foreground">Pemutaran otomatis memerlukan aplikasi tetap terbuka dan perangkat menyala; suara tidak berjalan saat aplikasi ditutup.</p>
+        </section>
       </main>
 
+      {pendingBackup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="restore-title" className="w-full max-w-md rounded-lg bg-card p-6 shadow-xl">
+            <h3 id="restore-title" className="text-xl font-bold">Pulihkan cadangan?</h3>
+            <p className="mt-3 text-muted-foreground">Cadangan ini berisi 4 jadwal dan {Object.keys(pendingBackup.audio).length} audio. Jadwal dan audio saat ini akan diganti.</p>
+            <div className="mt-6 flex flex-wrap gap-3 justify-end">
+              <Button variant="outline" disabled={backupBusy} onClick={() => setPendingBackup(null)}>Batal</Button>
+              <Button disabled={backupBusy} onClick={confirmRestore}><Upload /> Pulihkan Sekarang</Button>
+            </div>
+          </div>
+        </div>
+      )}
       {guide && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 p-4" onClick={() => setGuide(false)}>
-          <div className="max-w-md w-full rounded-2xl bg-card p-8 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="max-w-md w-full max-h-[90dvh] overflow-y-auto rounded-lg bg-card p-6 sm:p-8 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-2xl font-extrabold mb-5">Panduan Singkat</h3>
             {["Hubungkan speaker bluetooth ke komputer.", "Pilih lagu & jam untuk setiap hari, lalu klik \"Aktifkan Jadwal Otomatis\".", "Biarkan tab ini tetap terbuka (boleh di-minimize)."].map((t, i) => (
               <div key={i} className="flex gap-4 mb-4">
@@ -301,7 +362,7 @@ function Index() {
                 <p className="pt-1.5 font-medium">{t}</p>
               </div>
             ))}
-            <button onClick={() => setGuide(false)} className="mt-2 w-full rounded-lg bg-primary py-3 font-bold text-primary-foreground">Mengerti</button>
+            <Button onClick={() => setGuide(false)} className="mt-2 w-full rounded-lg bg-primary py-3 font-bold text-primary-foreground">Mengerti</Button>
           </div>
         </div>
       )}
@@ -309,12 +370,12 @@ function Index() {
   );
 }
 
-function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
-    <button role="switch" aria-checked={checked} onClick={() => onChange(!checked)}
-      className={`relative h-7 w-12 shrink-0 rounded-full transition ${checked ? "bg-success" : "bg-muted-foreground/30"}`}>
+    <Button variant="ghost" aria-label={label} role="switch" aria-checked={checked} onClick={() => onChange(!checked)}
+      className={`relative h-7 w-12 p-0 shrink-0 rounded-full transition hover:opacity-90 ${checked ? "bg-success" : "bg-muted-foreground/30"}`}>
       <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-card shadow transition-all ${checked ? "left-[22px]" : "left-0.5"}`} />
-    </button>
+    </Button>
   );
 }
 
@@ -322,7 +383,7 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint: strin
   return (
     <div className="flex items-center justify-between gap-3">
       <div><p className="font-semibold">{label}</p><p className="text-xs text-muted-foreground">{hint}</p></div>
-      <Switch checked={checked} onChange={onChange} />
+      <Switch label={label} checked={checked} onChange={onChange} />
     </div>
   );
 }

@@ -6,6 +6,7 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { VitePWA } from "vite-plugin-pwa";
+import bpomLogo from "./src/assets/bpom-logo.png.asset.json";
 
 // The app is server-rendered, so there is no static index.html in the build output.
 // We precache the rendered "/" page itself (revisioned per build) and use it as the
@@ -36,7 +37,7 @@ export default defineConfig({
           cleanupOutdatedCaches: true,
           globPatterns: ["**/*.{js,css,html,ico,png,svg,webp,woff,woff2,webmanifest}"],
           maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
-          additionalManifestEntries: [{ url: "/", revision: BUILD_REV }],
+          additionalManifestEntries: [{ url: "/", revision: BUILD_REV }, { url: bpomLogo.url, revision: null }],
           navigateFallback: null,
           runtimeCaching: [
             {
