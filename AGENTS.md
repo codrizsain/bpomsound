@@ -10,5 +10,8 @@
 <!-- LOVABLE:END -->
 
 ## Offline / PWA
+- Store office settings locally and audio in IndexedDB; use a versioned ZIP archive for offline device transfer because Cloud storage cannot meet the offline-first requirement.
+- Normalize persisted schedules through the shared settings module; export and restore with the same rules so legacy data cannot reintroduce unsupported days or preset titles.
+- Precache the uploaded logo pointer URL explicitly so branding remains available without internet.
 - The service worker must be emitted into `dist/client` (workbox `globDirectory` + `swDest`), because only that folder is served; otherwise `/sw.js` is missing and offline fails.
 - The app is server-rendered (no static index.html), so "/" is precached as an `additionalManifestEntries` item and used as `precacheFallback` for NetworkFirst navigations — this is what lets the app open offline.
