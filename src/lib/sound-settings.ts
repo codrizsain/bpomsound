@@ -1,7 +1,7 @@
 export const DAYS = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 export const ORDER = [1, 2, 3, 4];
 export const SETTINGS_KEY = "bpom-sound-settings";
-export type DayCfg = { enabled: boolean; time: string; title: string; fileName?: string };
+export type DayCfg = { enabled: boolean; time: string; title: string; fileName?: string | undefined };
 export type Settings = { active: boolean; volume: number; keepAlive: boolean; wakeLock: boolean; days: Record<number, DayCfg> };
 export const DEFAULTS: Settings = {
   active: false, volume: 0.8, keepAlive: true, wakeLock: false,

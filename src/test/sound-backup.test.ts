@@ -1,4 +1,4 @@
-// @vitest-environment node
+import { Blob as NodeBlob } from "node:buffer";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/audio-db", () => ({ getAudio: vi.fn(), replaceAudio: vi.fn() }));
 import { getAudio, replaceAudio } from "@/lib/audio-db";
@@ -8,6 +8,7 @@ import { normalizeSettings, SETTINGS_KEY } from "@/lib/sound-settings";
 describe("Offline backup", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal("Blob", NodeBlob);
     const storage = new Map<string, string>();
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => storage.get(key) ?? null,
