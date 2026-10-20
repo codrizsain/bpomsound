@@ -258,10 +258,10 @@ function Index() {
               </span>
             </div>
             {today !== undefined && s.days[today]?.enabled && (
-              <p className="mt-2 text-muted-foreground">Jadwal hari ini: <b className="text-foreground">{s.days[today].time}</b> — {s.days[today].title}</p>
+              <p className="mt-2 text-muted-foreground break-all">Jadwal hari ini: <b className="text-foreground">{s.days[today].time}</b> — {s.days[today].title}</p>
             )}
-            {playing && <p className="mt-3 rounded-lg bg-accent px-4 py-2 font-semibold text-accent-foreground">▶ Sedang diputar: {playing}</p>}
-            {log && <p className="mt-3 text-sm text-muted-foreground">{log}</p>}
+            {playing && <p className="mt-3 rounded-lg bg-accent px-4 py-2 font-semibold text-accent-foreground break-all">▶ Sedang diputar: {playing}</p>}
+            {log && <p role="status" className="mt-3 text-sm text-muted-foreground break-all">{log}</p>}
           </div>
 
           <div className="flex flex-col gap-4">
