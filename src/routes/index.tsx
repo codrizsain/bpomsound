@@ -7,7 +7,7 @@ import { Download, Upload, Play, Square, Pause, HelpCircle, ShieldCheck } from "
 import { DAYS, ORDER, DEFAULTS, SETTINGS_KEY as LS, normalizeSettings, type Settings, type DayCfg } from "@/lib/sound-settings";
 import { createBackup, readBackup, restoreBackup } from "@/lib/sound-backup";
 import bpomLogo from "@/assets/bpom-logo.png.asset.json";
-import soundLogo from "@/assets/sound-logo.png";
+import soundLogo from "@/assets/sound-logo-clean-v3.png";
 
 export const Route = createFileRoute("/")({
   head: () => ({
