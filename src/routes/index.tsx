@@ -3,10 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { saveAudio, getAudio, deleteAudio } from "@/lib/audio-db";
 import { registerAppSW } from "@/lib/sw-register";
 import { Button } from "@/components/ui/button";
-import { Download, Upload, Play, Square, Pause, HelpCircle, ShieldCheck, Volume2 } from "lucide-react";
+import { Download, Upload, Play, Square, Pause, HelpCircle, ShieldCheck } from "lucide-react";
 import { DAYS, ORDER, DEFAULTS, SETTINGS_KEY as LS, normalizeSettings, type Settings, type DayCfg } from "@/lib/sound-settings";
 import { createBackup, readBackup, restoreBackup } from "@/lib/sound-backup";
 import bpomLogo from "@/assets/bpom-logo.png.asset.json";
+import soundLogo from "@/assets/sound-logo.png";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -229,12 +230,10 @@ function Index() {
       <div className="h-1.5 flex"><div className="flex-1 bg-destructive" /><div className="flex-1 bg-card" /><div className="flex-1 bg-primary" /></div>
       <header className="bg-primary text-primary-foreground">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 py-5 flex flex-wrap items-center gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-card text-primary" role="img" aria-label="Logo Sound">
-            <Volume2 className="h-9 w-9" aria-hidden="true" />
-          </div>
+          <img src={soundLogo} alt="Logo Sound" width={72} height={72} className="h-16 w-16 sm:h-18 sm:w-18 shrink-0 object-contain" />
           <div className="flex-1 min-w-0">
             <p className="text-xs uppercase opacity-80">Badan Pengawas Obat dan Makanan</p>
-            <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold">Sistem Sound Otomatis Kantor BPOM Tanjung Balai</h1>
+            <h1 className="text-xl sm:text-2xl md:text-[28px] leading-snug font-extrabold">Sistem Sound Otomatis Kantor BPOM Tanjung Balai</h1>
             {offline && (
               <p role="status" className="mt-1.5 inline-flex items-center gap-2 rounded-full bg-primary-foreground/15 px-3 py-1 text-xs font-semibold">
                 <span className="h-2 w-2 rounded-full bg-success" />
@@ -251,12 +250,12 @@ function Index() {
       <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-8 space-y-8">
         <section className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
           <div className="rounded-lg bg-card border p-4 sm:p-8 shadow-sm">
-            <div className="flex items-center justify-between gap-3 sm:gap-6">
+            <div className="flex items-center justify-between gap-2 sm:gap-4">
               <div className="min-w-0">
                 <p className="text-muted-foreground font-semibold capitalize">{date}</p>
-                <p className="font-mono text-[32px] sm:text-5xl xl:text-6xl font-bold text-primary tabular-nums my-3 whitespace-nowrap">{time}</p>
+                <p className="font-mono text-[30px] sm:text-5xl lg:text-[42px] xl:text-[52px] font-bold text-primary tabular-nums my-3 whitespace-nowrap">{time}</p>
               </div>
-              <img src={bpomLogo.url} alt="Logo Badan POM" width={112} height={112} className="h-16 w-12 shrink-0 object-contain sm:h-28 sm:w-24 xl:h-32 xl:w-28" />
+              <img src={bpomLogo.url} alt="Logo Badan POM" width={144} height={160} className="h-24 w-20 shrink-0 object-contain sm:h-40 sm:w-36" />
             </div>
             <div className="flex items-center gap-3 mt-4">
               <span className={`h-4 w-4 rounded-full ${s.active ? "bg-success motion-safe:animate-pulse" : "bg-muted-foreground/40"}`} />
