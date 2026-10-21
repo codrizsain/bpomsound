@@ -10,6 +10,7 @@
 <!-- LOVABLE:END -->
 
 ## Offline / PWA
+- Derive the header sound logo, favicon and PWA icons from one transparent source and use distinct icon URLs on replacement to avoid stale installed/browser icon caches.
 - Store office settings locally and audio in IndexedDB; use a versioned ZIP archive for offline device transfer because Cloud storage cannot meet the offline-first requirement.
 - Normalize persisted schedules through the shared settings module; export and restore with the same rules so legacy data cannot reintroduce unsupported days or preset titles.
 - Precache the uploaded logo pointer URL explicitly so branding remains available without internet.

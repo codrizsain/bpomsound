@@ -5,5 +5,8 @@
   "display": "standalone",
   "background_color": "#f4f7fb",
   "theme_color": "#0b4a9c",
-  "icons": [{ "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }]
+  "icons": [
+    { "src": "/sound-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/sound-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
 }
