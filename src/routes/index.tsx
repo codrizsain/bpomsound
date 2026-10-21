@@ -231,7 +231,7 @@ function Index() {
       <header className="bg-primary text-primary-foreground">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 py-5 flex flex-wrap items-center gap-4">
           <img src={soundLogo} alt="Logo Sound" width={72} height={72} className="h-16 w-16 sm:h-18 sm:w-18 shrink-0 object-contain" />
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-[160px]">
             <p className="text-xs uppercase opacity-80">Badan Pengawas Obat dan Makanan</p>
             <h1 className="text-xl sm:text-2xl md:text-[28px] leading-snug font-extrabold">Sistem Sound Otomatis Kantor BPOM Tanjung Balai</h1>
             {offline && (
@@ -241,7 +241,7 @@ function Index() {
               </p>
             )}
           </div>
-          <Button onClick={() => setGuide(true)} variant="outline" className="border-primary-foreground/40 bg-transparent text-primary-foreground">
+          <Button onClick={() => setGuide(true)} variant="outline" className="ml-auto shrink-0 border-primary-foreground/40 bg-transparent text-primary-foreground">
             <HelpCircle /> Panduan
           </Button>
         </div>
