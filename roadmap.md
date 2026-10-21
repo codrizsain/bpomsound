@@ -1,4 +1,5 @@
 # Tasks
+- [x] Remove remaining white corner pixels while preserving the blue sound logo and replace cached website/PWA icon URLs.
 - [x] Remove the sound icon's white outer background and use it in the header and website/app icons.
 - [x] Enlarge the BPOM logo and application name, and verify layouts.
 - [x] Add BPOM logo and requested heading.
