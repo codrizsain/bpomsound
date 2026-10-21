@@ -368,6 +368,7 @@ function Index() {
                 <p className="pt-1.5 font-medium">{t}</p>
               </div>
             ))}
+            <p className="mt-5 border-t border-border pt-4 text-center text-sm font-semibold text-muted-foreground">Dibuat Oleh PT Coodlex Technology Indonesia</p>
             <Button onClick={() => setGuide(false)} className="mt-2 w-full rounded-lg bg-primary py-3 font-bold text-primary-foreground">Mengerti</Button>
           </div>
         </div>
