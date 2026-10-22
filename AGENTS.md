@@ -13,6 +13,7 @@
 - Derive the header sound logo, favicon and PWA icons from one transparent source and use distinct icon URLs on replacement to avoid stale installed/browser icon caches.
 - Store office settings locally and audio in IndexedDB; use a versioned ZIP archive for offline device transfer because Cloud storage cannot meet the offline-first requirement.
 - Normalize persisted schedules through the shared settings module; export and restore with the same rules so legacy data cannot reintroduce unsupported days or preset titles.
+- The schedule model has per-day morning slots (`day-1`..`day-4`) plus two fixed leaving slots (`leaving-warn`, `leaving-out`); backups stay version 1 with audio entries keyed by these sound IDs and readers accept the older numeric day keys.
 - Precache the uploaded logo pointer URL explicitly so branding remains available without internet.
 - The service worker must be emitted into `dist/client` (workbox `globDirectory` + `swDest`), because only that folder is served; otherwise `/sw.js` is missing and offline fails.
 - The app is server-rendered (no static index.html), so "/" is precached as an `additionalManifestEntries` item and used as `precacheFallback` for NetworkFirst navigations — this is what lets the app open offline.

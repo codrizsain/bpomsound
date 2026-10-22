@@ -1,4 +1,5 @@
 # Tasks
+- [x] Add two daily leaving sounds (Sound Peringatan Pulang 15:55 and Sound Pulang 16:00, Senin–Kamis) with per-slot audio upload, Test Putar, and inclusion in offline backup/restore.
 - [x] Remove remaining white corner pixels while preserving the blue sound logo and replace cached website/PWA icon URLs.
 - [x] Remove the sound icon's white outer background and use it in the header and website/app icons.
 - [x] Enlarge the BPOM logo and application name, and verify layouts.

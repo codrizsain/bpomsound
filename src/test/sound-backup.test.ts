@@ -23,13 +23,29 @@ describe("Offline backup", () => {
     const restored = await readBackup(new Blob([new Uint8Array(archive)]));
     expect(restored.settings.days[1]?.time).toBe("08:15");
     expect(restored.settings.days[1]?.fileName).toBe("Sound.wav");
-    const audio = restored.audio[1];
+    const audio = restored.audio["day-1"];
     expect(audio).toBeDefined();
     if (!audio) throw new Error("Restored audio is missing");
     expect(new Uint8Array(await audio.arrayBuffer())).toEqual(bytes);
     await restoreBackup(restored);
     expect(replaceAudio).toHaveBeenCalledWith(restored.audio);
     expect(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}").days[1].time).toBe("08:15");
+  });
+  it("includes the two leaving sounds in the archive", async () => {
+    const bytes = new Uint8Array([80, 85, 76, 65, 78, 71]);
+    vi.mocked(getAudio).mockImplementation(async (key) => key === "leaving-warn" ? new Blob([bytes], { type: "audio/mpeg" }) : undefined);
+    const s = normalizeSettings({ leaving: { warn: { time: "15:50", fileName: "Peringatan Pulang.mp3" } } });
+    const archive = await createBackup(s);
+    const restored = await readBackup(new Blob([new Uint8Array(archive)]));
+    expect(restored.settings.leaving.warn.time).toBe("15:50");
+    expect(restored.settings.leaving.warn.fileName).toBe("Peringatan Pulang.mp3");
+    const audio = restored.audio["leaving-warn"];
+    expect(audio).toBeDefined();
+    if (!audio) throw new Error("Restored leaving audio is missing");
+    expect(new Uint8Array(await audio.arrayBuffer())).toEqual(bytes);
+    expect(restored.settings.leaving.out.fileName).toBeUndefined();
+    await restoreBackup(restored);
+    expect(replaceAudio).toHaveBeenCalledWith(restored.audio);
   });
   it("rejects invalid backups without replacing existing sound", async () => {
     await expect(readBackup(new Blob(["not a ZIP"]))).rejects.toThrow();
