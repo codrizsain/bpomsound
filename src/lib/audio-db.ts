@@ -42,16 +42,16 @@ export async function deleteAudio(key: string) {
   });
 }
 
-// Restore all supported days in a single transaction, leaving the old data intact on failure.
-export async function replaceAudio(files: Record<number, Blob>) {
+// Restore every supported sound slot in a single transaction, leaving the old data intact on failure.
+export async function replaceAudio(files: Record<string, Blob>) {
   const db = await open();
   return new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
     const store = tx.objectStore(STORE);
-    for (const day of [1, 2, 3, 4]) {
-      const file = files[day];
-      if (file) store.put(file, `day-${day}`);
-      else store.delete(`day-${day}`);
+    for (const key of ["day-1", "day-2", "day-3", "day-4", "leaving-warn", "leaving-out"]) {
+      const file = files[key];
+      if (file) store.put(file, key);
+      else store.delete(key);
     }
     tx.oncomplete = () => { db.close(); resolve(); };
     tx.onerror = () => { db.close(); reject(tx.error); };
