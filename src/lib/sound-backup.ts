@@ -45,7 +45,8 @@ export async function readBackup(file: Blob) {
       audio[key] = new Blob([new Uint8Array(content)], { type: typeof entry.type === "string" ? entry.type : "" });
     } else if (fileName) throw new Error("Audio dalam cadangan tidak lengkap.");
   };
-  for (const day of ORDER) collect(`day-${day}`, settings.days[day]?.fileName, data.audio[day]);
+  // Accepts both the current "day-1" audio keys and the older numeric ones from previous backups.
+  for (const day of ORDER) collect(`day-${day}`, settings.days[day]?.fileName, data.audio[`day-${day}`] ?? data.audio[day]);
   for (const k of LEAVING_SLOTS) collect(`leaving-${k}`, settings.leaving[k]?.fileName, data.audio[`leaving-${k}`]);
   return { settings, audio };
 }
