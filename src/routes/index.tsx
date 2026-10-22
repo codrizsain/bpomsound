@@ -4,7 +4,7 @@ import { saveAudio, getAudio, deleteAudio } from "@/lib/audio-db";
 import { registerAppSW } from "@/lib/sw-register";
 import { Button } from "@/components/ui/button";
 import { Download, Upload, Play, Square, Pause, HelpCircle, ShieldCheck } from "lucide-react";
-import { DAYS, ORDER, DEFAULTS, SETTINGS_KEY as LS, normalizeSettings, type Settings, type DayCfg } from "@/lib/sound-settings";
+import { DAYS, ORDER, DEFAULTS, LEAVING_LABELS, LEAVING_SLOTS, SETTINGS_KEY as LS, normalizeSettings, type Settings, type DayCfg, type LeavingKey } from "@/lib/sound-settings";
 import { createBackup, readBackup, restoreBackup } from "@/lib/sound-backup";
 import bpomLogo from "@/assets/bpom-logo.png.asset.json";
 import soundLogo from "@/assets/sound-logo-clean-v3.png";
@@ -49,7 +49,7 @@ function Index() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
   const wakeRef = useRef<WakeLockSentinel | null>(null);
-  const firedRef = useRef<string>("");
+  const firedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     try {
@@ -113,16 +113,26 @@ function Index() {
     return () => document.removeEventListener("visibilitychange", vis);
   }, [s.wakeLock, loaded]);
 
-  // Scheduler
+  // Scheduler — morning sound per day plus the two leaving sounds on workdays
   useEffect(() => {
     if (!now || !s.active) return;
     const d = now.getDay();
-    const cfg = s.days[d];
     const hm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    const key = `${now.toDateString()}-${hm}`;
-    if (cfg?.enabled && cfg.time === hm && firedRef.current !== key) {
-      firedRef.current = key;
-      play(d, true);
+    const jobs: { id: string; audioKey: string; name: string; time: string }[] = [];
+    const cfg = ORDER.includes(d) ? s.days[d] : undefined;
+    if (cfg?.enabled) jobs.push({ id: "day", audioKey: `day-${d}`, name: cfg.title, time: cfg.time });
+    if (d >= 1 && d <= 4) {
+      for (const k of LEAVING_SLOTS) {
+        const c = s.leaving[k];
+        if (c.enabled) jobs.push({ id: `leaving-${k}`, audioKey: `leaving-${k}`, name: c.fileName ? `${LEAVING_LABELS[k]} — ${c.fileName}` : LEAVING_LABELS[k], time: c.time });
+      }
+    }
+    for (const job of jobs) {
+      const key = `${now.toDateString()}-${hm}-${job.id}`;
+      if (job.time === hm && !firedRef.current.has(key)) {
+        firedRef.current.add(key);
+        void playAudio(job.audioKey, job.name, "Jadwal otomatis");
+      }
     }
   }, [now]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -137,19 +147,17 @@ function Index() {
     setTimeout(() => ctx.close(), 2500);
   }
 
-  async function play(day: number, auto = false) {
+  async function playAudio(audioKey: string, name: string, note: string) {
     stop();
-    const cfg = s.days[day];
-    if (!cfg) return;
     const operation = operationRef.current;
     let blob: Blob | undefined;
-    try { blob = await getAudio(`day-${day}`); }
+    try { blob = await getAudio(audioKey); }
     catch { setLog("Audio tidak dapat dibaca dari penyimpanan perangkat."); return; }
     if (operation !== operationRef.current) return;
     const stamp = new Date().toLocaleTimeString("id-ID");
     if (!blob) {
       chime();
-      setLog(`${stamp} — ${DAYS[day]}: belum ada file audio, memutar nada uji.`);
+      setLog(`${stamp} — ${name}: belum ada file audio, memutar nada uji.`);
       return;
     }
     const a = new Audio(URL.createObjectURL(blob));
@@ -158,11 +166,16 @@ function Index() {
     audioRef.current = a;
     try {
       await a.play();
-      setPlaying(cfg.title);
-      setLog(`${stamp} — ${auto ? "Jadwal otomatis" : "Test putar"}: ${cfg.title}`);
+      setPlaying(name);
+      setLog(`${stamp} — ${note}: ${name}`);
     } catch {
       setLog(`${stamp} — Gagal memutar. Klik sekali di halaman agar browser mengizinkan suara.`);
     }
+  }
+
+  function play(day: number, auto = false) {
+    const cfg = s.days[day];
+    if (cfg) void playAudio(`day-${day}`, cfg.title, auto ? "Jadwal otomatis" : "Test putar");
   }
 
   function stop() {
@@ -184,6 +197,19 @@ function Index() {
       await saveAudio(`day-${d}`, f);
       upd(d, { fileName: f.name, title: f.name });
       setLog(`${DAYS[d]} — ${f.name} tersimpan di perangkat ini.`);
+      if (navigator.storage?.persist) void navigator.storage.persist().catch(() => {});
+    } catch { setLog("Audio gagal disimpan. Periksa ruang penyimpanan perangkat dan coba kembali."); }
+  }
+
+  const updLeaving = (k: LeavingKey, p: Partial<DayCfg>) =>
+    setS((x) => ({ ...x, leaving: { ...x.leaving, [k]: { ...x.leaving[k], ...p } } }));
+
+  async function onFileLeaving(k: LeavingKey, f?: File) {
+    if (!f) return;
+    try {
+      await saveAudio(`leaving-${k}`, f);
+      updLeaving(k, { fileName: f.name, title: f.name });
+      setLog(`${LEAVING_LABELS[k]} — ${f.name} tersimpan di perangkat ini.`);
       if (navigator.storage?.persist) void navigator.storage.persist().catch(() => {});
     } catch { setLog("Audio gagal disimpan. Periksa ruang penyimpanan perangkat dan coba kembali."); }
   }
@@ -224,6 +250,7 @@ function Index() {
   const time = now ? now.toLocaleTimeString("id-ID", { hour12: false }).replace(/\./g, ":") : "--:--:--";
   const date = now ? now.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "";
   const today = now?.getDay();
+  const leavingToday = today !== undefined && today >= 1 && today <= 4 ? LEAVING_SLOTS.filter((k) => s.leaving[k].enabled) : [];
 
   return (
     <div className="min-h-screen bg-background font-sans">
@@ -265,6 +292,9 @@ function Index() {
             </div>
             {today !== undefined && s.days[today]?.enabled && (
               <p className="mt-2 text-muted-foreground break-all">Jadwal hari ini: <b className="text-foreground">{s.days[today].time}</b> — {s.days[today].title}</p>
+            )}
+            {leavingToday.length > 0 && (
+              <p className="mt-1 text-muted-foreground break-all">Sound pulang: {leavingToday.map((k) => `${LEAVING_LABELS[k]} ${s.leaving[k].time}`).join(" • ")}</p>
             )}
             {playing && <p className="mt-3 rounded-lg bg-accent px-4 py-2 font-semibold text-accent-foreground break-all">▶ Sedang diputar: {playing}</p>}
             {log && <p role="status" className="mt-3 text-sm text-muted-foreground break-all">{log}</p>}
@@ -320,6 +350,41 @@ function Index() {
                     </div>
                   </div>
                   <Button onClick={() => play(d)} variant="secondary" className="h-12 px-5 font-bold">
+                    <Play /> Test Putar
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+        <section>
+          <h2 className="text-2xl font-extrabold mb-1">Jadwal Sound Pulang</h2>
+          <p className="text-sm text-muted-foreground mb-4">Diputar otomatis setiap hari kerja Senin sampai Kamis.</p>
+          <div className="grid gap-3">
+            {LEAVING_SLOTS.map((k) => {
+              const c = s.leaving[k];
+              const name = c.fileName ? `${LEAVING_LABELS[k]} — ${c.fileName}` : LEAVING_LABELS[k];
+              return (
+                <div key={k} className={`rounded-lg border bg-card p-4 grid gap-4 sm:grid-cols-[140px_1fr] lg:grid-cols-[minmax(0,230px)_120px_minmax(0,1fr)_auto] items-center ${c.enabled ? "" : "opacity-60"}`}>
+                  <div className="flex items-center gap-3">
+                    <Switch label={`Jadwal ${LEAVING_LABELS[k]}`} checked={c.enabled} onChange={(v) => updLeaving(k, { enabled: v })} />
+                    <span className="font-bold text-lg">{LEAVING_LABELS[k]}</span>
+                  </div>
+                  <input type="time" aria-label={`Jam ${LEAVING_LABELS[k]}`} value={c.time} onChange={(e) => updLeaving(k, { time: e.target.value })}
+                    className="min-w-0 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-lg font-bold" />
+                  <div className="min-w-0">
+                    <p className="font-semibold break-all">{c.fileName ?? "Belum ada audio"}</p>
+                    <div className="flex flex-wrap gap-3 items-center text-sm">
+                      <label className="cursor-pointer text-primary font-semibold hover:underline">
+                        {c.fileName ? "Ganti file audio" : "Pilih file audio…"}
+                        <input type="file" aria-label={`Audio ${LEAVING_LABELS[k]}`} accept="audio/*" className="hidden" onChange={(e) => onFileLeaving(k, e.target.files?.[0])} />
+                      </label>
+                      {c.fileName ? (
+                        <Button variant="ghost" className="h-auto p-0 text-destructive hover:underline" onClick={async () => { try { await deleteAudio(`leaving-${k}`); updLeaving(k, { fileName: undefined, title: "Belum ada audio" }); } catch { setLog("Audio gagal dihapus. Coba kembali."); } }}>Hapus</Button>
+                      ) : <span className="text-muted-foreground">(belum ada file)</span>}
+                    </div>
+                  </div>
+                  <Button onClick={() => void playAudio(`leaving-${k}`, name, "Test putar")} variant="secondary" className="h-12 px-5 font-bold">
                     <Play /> Test Putar
                   </Button>
                 </div>
