@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { saveAudio, getAudio, deleteAudio } from "@/lib/audio-db";
 import { registerAppSW } from "@/lib/sw-register";
 import { Button } from "@/components/ui/button";
+import { FilePicker, AUDIO_ACCEPT } from "@/components/file-picker";
+import { dueSoundJobs } from "@/lib/sound-schedule";
 import { Download, Upload, Play, Square, Pause, HelpCircle, ShieldCheck } from "lucide-react";
-import { DAYS, ORDER, DEFAULTS, LEAVING_LABELS, LEAVING_SLOTS, SETTINGS_KEY as LS, normalizeSettings, type Settings, type DayCfg, type LeavingKey } from "@/lib/sound-settings";
+import { DAYS, ORDER, DEFAULTS, LEAVING_LABELS, LEAVING_SLOTS, SETTINGS_KEY as LS, normalizeSettings, type Settings, type DayCfg, type LeavingCfg, type LeavingKey } from "@/lib/sound-settings";
 import { createBackup, readBackup, restoreBackup } from "@/lib/sound-backup";
 import bpomLogo from "@/assets/bpom-logo.png.asset.json";
 import soundLogo from "@/assets/sound-logo-clean-v3.png";
@@ -12,9 +14,9 @@ import soundLogo from "@/assets/sound-logo-clean-v3.png";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Sistem Sound Otomatis — BPOM Tanjung Balai" },
+      { title: "Sistem Sound Otomatis Kantor BPOM Tanjung Balai" },
       { name: "description", content: "Pemutar audio terjadwal otomatis untuk Kantor BPOM Tanjung Balai, bekerja offline." },
-      { property: "og:title", content: "Sistem Sound Otomatis — BPOM Tanjung Balai" },
+      { property: "og:title", content: "Sistem Sound Otomatis Kantor BPOM Tanjung Balai" },
       { property: "og:description", content: "Pemutar audio terjadwal otomatis, bekerja offline." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -116,20 +118,9 @@ function Index() {
   // Scheduler — morning sound per day plus the two leaving sounds on workdays
   useEffect(() => {
     if (!now || !s.active) return;
-    const d = now.getDay();
-    const hm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    const jobs: { id: string; audioKey: string; name: string; time: string }[] = [];
-    const cfg = ORDER.includes(d) ? s.days[d] : undefined;
-    if (cfg?.enabled) jobs.push({ id: "day", audioKey: `day-${d}`, name: cfg.title, time: cfg.time });
-    if (d >= 1 && d <= 4) {
-      for (const k of LEAVING_SLOTS) {
-        const c = s.leaving[k];
-        if (c.enabled) jobs.push({ id: `leaving-${k}`, audioKey: `leaving-${k}`, name: c.fileName ? `${LEAVING_LABELS[k]} — ${c.fileName}` : LEAVING_LABELS[k], time: c.time });
-      }
-    }
-    for (const job of jobs) {
-      const key = `${now.toDateString()}-${hm}-${job.id}`;
-      if (job.time === hm && !firedRef.current.has(key)) {
+    for (const job of dueSoundJobs(s, now)) {
+      const key = `${now.toDateString()}-${job.time}-${job.audioKey}`;
+      if (!firedRef.current.has(key)) {
         firedRef.current.add(key);
         void playAudio(job.audioKey, job.name, "Jadwal otomatis");
       }
@@ -157,7 +148,7 @@ function Index() {
     const stamp = new Date().toLocaleTimeString("id-ID");
     if (!blob) {
       chime();
-      setLog(`${stamp} — ${name}: belum ada file audio, memutar nada uji.`);
+      setLog(`${stamp}: ${name}, belum ada file audio, memutar nada uji.`);
       return;
     }
     const a = new Audio(URL.createObjectURL(blob));
@@ -167,9 +158,9 @@ function Index() {
     try {
       await a.play();
       setPlaying(name);
-      setLog(`${stamp} — ${note}: ${name}`);
+      setLog(`${stamp}: ${note}, ${name}`);
     } catch {
-      setLog(`${stamp} — Gagal memutar. Klik sekali di halaman agar browser mengizinkan suara.`);
+      setLog(`${stamp}: Gagal memutar. Klik sekali di halaman agar browser mengizinkan suara.`);
     }
   }
 
@@ -196,12 +187,12 @@ function Index() {
     try {
       await saveAudio(`day-${d}`, f);
       upd(d, { fileName: f.name, title: f.name });
-      setLog(`${DAYS[d]} — ${f.name} tersimpan di perangkat ini.`);
+      setLog(`${DAYS[d]}: ${f.name} tersimpan di perangkat ini.`);
       if (navigator.storage?.persist) void navigator.storage.persist().catch(() => {});
     } catch { setLog("Audio gagal disimpan. Periksa ruang penyimpanan perangkat dan coba kembali."); }
   }
 
-  const updLeaving = (k: LeavingKey, p: Partial<DayCfg>) =>
+  const updLeaving = (k: LeavingKey, p: Partial<LeavingCfg>) =>
     setS((x) => ({ ...x, leaving: { ...x.leaving, [k]: { ...x.leaving[k], ...p } } }));
 
   async function onFileLeaving(k: LeavingKey, f?: File) {
@@ -209,7 +200,7 @@ function Index() {
     try {
       await saveAudio(`leaving-${k}`, f);
       updLeaving(k, { fileName: f.name, title: f.name });
-      setLog(`${LEAVING_LABELS[k]} — ${f.name} tersimpan di perangkat ini.`);
+      setLog(`${LEAVING_LABELS[k]}: ${f.name} tersimpan di perangkat ini.`);
       if (navigator.storage?.persist) void navigator.storage.persist().catch(() => {});
     } catch { setLog("Audio gagal disimpan. Periksa ruang penyimpanan perangkat dan coba kembali."); }
   }
@@ -247,54 +238,56 @@ function Index() {
     finally { setBackupBusy(false); }
   }
 
-  const time = now ? now.toLocaleTimeString("id-ID", { hour12: false }).replace(/\./g, ":") : "--:--:--";
+  const time = now ? now.toLocaleTimeString("id-ID", { hour12: false }).replace(/\./g, ":") : "00:00:00";
   const date = now ? now.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "";
   const today = now?.getDay();
   const leavingToday = today !== undefined && today >= 1 && today <= 4 ? LEAVING_SLOTS.filter((k) => s.leaving[k].enabled) : [];
 
   return (
-    <div className="min-h-screen bg-background font-sans">
+    <div className="min-h-dvh bg-background font-sans">
       <div className="h-1.5 flex"><div className="flex-1 bg-destructive" /><div className="flex-1 bg-card" /><div className="flex-1 bg-primary" /></div>
       <header className="bg-primary text-primary-foreground">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-5 flex flex-wrap items-center gap-4">
-          <img src={soundLogo} alt="Logo Sound" width={72} height={72} className="h-16 w-16 sm:h-18 sm:w-18 shrink-0 object-contain" />
-          <div className="flex-1 min-w-[160px]">
-            <p className="text-xs uppercase opacity-80">Badan Pengawas Obat dan Makanan</p>
-            <h1 className="text-xl sm:text-2xl md:text-[28px] leading-snug font-extrabold">Sistem Sound Otomatis Kantor BPOM Tanjung Balai</h1>
+        <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-4 py-4 sm:items-center sm:gap-5 sm:px-6 sm:py-5">
+          <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
+          <img src={soundLogo} alt="Logo Sound" width={72} height={72} className="h-11 w-11 sm:h-18 sm:w-18 shrink-0 object-contain" />
+          <div className="min-w-0">
+            <p className="hidden text-xs uppercase opacity-80 sm:block">Badan Pengawas Obat dan Makanan</p>
+            <h1 className="text-base sm:text-2xl md:text-[28px] leading-snug font-extrabold">Sistem Sound Otomatis Kantor BPOM Tanjung Balai</h1>
             {offline && (
-              <p role="status" className="mt-1.5 inline-flex items-center gap-2 rounded-full bg-primary-foreground/15 px-3 py-1 text-xs font-semibold">
-                <span className="h-2 w-2 rounded-full bg-success" />
+              <p role="status" className="mt-1.5 inline-flex items-center gap-2 text-xs font-semibold">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-success" />
                 Mode: Offline (Siap beroperasi tanpa internet)
               </p>
             )}
           </div>
-          <Button onClick={() => setGuide(true)} variant="outline" className="ml-auto shrink-0 border-primary-foreground/40 bg-transparent text-primary-foreground">
-            <HelpCircle /> Panduan
+          </div>
+          <Button onClick={() => setGuide(true)} aria-label="Panduan" title="Panduan" variant="outline" className="h-11 w-11 shrink-0 border-primary-foreground/40 bg-transparent p-0 text-primary-foreground sm:w-auto sm:px-4">
+            <HelpCircle /> <span className="hidden sm:inline">Panduan</span>
           </Button>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-8 space-y-8">
-        <section className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-5 sm:py-8 space-y-7 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <section className="grid min-w-0 gap-4 lg:gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           <div className="rounded-lg bg-card border p-4 sm:p-8 shadow-sm">
-            <div className="flex items-center justify-between gap-2 sm:gap-4">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:gap-4">
               <div className="min-w-0">
-                <p className="text-muted-foreground font-semibold capitalize">{date}</p>
-                <p className="font-mono text-[30px] sm:text-5xl lg:text-[42px] xl:text-[52px] font-bold text-primary tabular-nums my-3 whitespace-nowrap">{time}</p>
+                <p className="text-sm sm:text-base text-muted-foreground font-semibold capitalize">{date}</p>
+                <p className="font-mono text-2xl sm:text-5xl lg:text-[42px] xl:text-[52px] font-bold text-primary tabular-nums my-3 whitespace-nowrap">{time}</p>
               </div>
-              <img src={bpomLogo.url} alt="Logo Badan POM" width={144} height={160} className="h-24 w-20 shrink-0 object-contain sm:h-40 sm:w-36" />
+              <img src={bpomLogo.url} alt="Logo Badan POM" width={144} height={160} className="h-24 w-[72px] shrink-0 object-contain sm:h-40 sm:w-36" />
             </div>
-            <div className="flex items-center gap-3 mt-4">
-              <span className={`h-4 w-4 rounded-full ${s.active ? "bg-success motion-safe:animate-pulse" : "bg-muted-foreground/40"}`} />
-              <span className="text-lg font-bold">
-                {s.active ? "AKTIF — Standby menunggu jadwal" : "NONAKTIF — Jadwal tidak berjalan"}
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 mt-4">
+              <span className={`h-3 w-3 shrink-0 rounded-full ${s.active ? "bg-success motion-safe:animate-pulse" : "bg-muted-foreground/40"}`} />
+              <span className="text-base sm:text-lg font-bold">
+                {s.active ? "AKTIF: Standby menunggu jadwal" : "NONAKTIF: Jadwal tidak berjalan"}
               </span>
             </div>
             {today !== undefined && s.days[today]?.enabled && (
-              <p className="mt-2 text-muted-foreground break-all">Jadwal hari ini: <b className="text-foreground">{s.days[today].time}</b> — {s.days[today].title}</p>
+              <p className="mt-2 text-muted-foreground break-words">Jadwal hari ini: <b className="text-foreground">{s.days[today].time}</b>, {s.days[today].title}</p>
             )}
             {leavingToday.length > 0 && (
-              <p className="mt-1 text-muted-foreground break-all">Sound pulang: {leavingToday.map((k) => `${LEAVING_LABELS[k]} ${s.leaving[k].time}`).join(" • ")}</p>
+              <div className="mt-2 space-y-1 text-sm text-muted-foreground">{leavingToday.map((k) => <p key={k}>{LEAVING_LABELS[k]}: {[s.leaving[k].time, s.leaving[k].repeatTime].filter(Boolean).join(" dan ")}</p>)}</div>
             )}
             {playing && <p className="mt-3 rounded-lg bg-accent px-4 py-2 font-semibold text-accent-foreground break-all">▶ Sedang diputar: {playing}</p>}
             {log && <p role="status" className="mt-3 text-sm text-muted-foreground break-all">{log}</p>}
@@ -318,38 +311,35 @@ function Index() {
                   className="w-full accent-[var(--primary)] mt-2" />
               </label>
               <Toggle label="Cegah sleep / speaker standby" hint="Memutar sinyal senyap agar speaker bluetooth tidak mati" checked={s.keepAlive} onChange={(v) => setS((x) => ({ ...x, keepAlive: v }))} />
-              <Toggle label="Layar tetap menyala" hint="Mencegah layar komputer mati otomatis" checked={s.wakeLock} onChange={(v) => setS((x) => ({ ...x, wakeLock: v }))} />
+              <Toggle label="Layar tetap menyala" hint="Mencegah layar perangkat mati otomatis" checked={s.wakeLock} onChange={(v) => setS((x) => ({ ...x, wakeLock: v }))} />
             </div>
           </div>
         </section>
 
         <section>
-          <h2 className="text-2xl font-extrabold mb-4">Jadwal Mingguan</h2>
+          <h2 className="text-xl sm:text-2xl font-extrabold mb-4">Jadwal Mingguan</h2>
           <div className="grid gap-3">
             {ORDER.map((d) => {
               const c = s.days[d];
                if (!c) return null;
               return (
-                <div key={d} className={`rounded-lg border bg-card p-4 grid gap-4 sm:grid-cols-[140px_1fr] lg:grid-cols-[140px_120px_minmax(0,1fr)_auto] items-center ${today === d ? "ring-2 ring-primary" : ""} ${c.enabled ? "" : "opacity-60"}`}>
+                <div key={d} className={`min-w-0 rounded-lg border bg-card p-4 grid gap-4 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[140px_120px_minmax(0,1fr)_auto] items-center ${today === d ? "ring-2 ring-primary" : ""} ${c.enabled ? "" : "opacity-60"}`}>
                   <div className="flex items-center gap-3">
                     <Switch label={`Jadwal ${DAYS[d]}`} checked={c.enabled} onChange={(v) => upd(d, { enabled: v })} />
                     <span className="font-bold text-lg">{DAYS[d]}</span>
                   </div>
                   <input type="time" aria-label={`Jam ${DAYS[d]}`} value={c.time} onChange={(e) => upd(d, { time: e.target.value })}
                     className="min-w-0 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-lg font-bold" />
-                  <div className="min-w-0">
+                  <div className="col-span-2 min-w-0 lg:col-span-1">
                     <p className="font-semibold break-all">{c.fileName ?? "Belum ada audio"}</p>
-                    <div className="flex flex-wrap gap-3 items-center text-sm">
-                      <label className="cursor-pointer text-primary font-semibold hover:underline">
-                        {c.fileName ? "Ganti file audio" : "Pilih file audio…"}
-                        <input type="file" aria-label={`Audio ${DAYS[d]}`} accept="audio/*" className="hidden" onChange={(e) => onFile(d, e.target.files?.[0])} />
-                      </label>
+                    <div className="mt-2 flex flex-wrap gap-3 items-center text-sm">
+                      <FilePicker label={`Audio ${DAYS[d]}`} accept={AUDIO_ACCEPT} onSelect={(file) => void onFile(d, file)}>{c.fileName ? "Ganti audio" : "Pilih audio"}</FilePicker>
                       {c.fileName ? (
                         <Button variant="ghost" className="h-auto p-0 text-destructive hover:underline" onClick={async () => { try { await deleteAudio(`day-${d}`); upd(d, { fileName: undefined, title: "Belum ada audio" }); } catch { setLog("Audio gagal dihapus. Coba kembali."); } }}>Hapus</Button>
                       ) : <span className="text-muted-foreground">(belum ada file)</span>}
                     </div>
                   </div>
-                  <Button onClick={() => play(d)} variant="secondary" className="h-12 px-5 font-bold">
+                  <Button onClick={() => play(d)} variant="secondary" className="col-span-2 h-11 px-5 font-bold lg:col-span-1">
                     <Play /> Test Putar
                   </Button>
                 </div>
@@ -358,33 +348,39 @@ function Index() {
           </div>
         </section>
         <section>
-          <h2 className="text-2xl font-extrabold mb-1">Jadwal Sound Pulang</h2>
+          <h2 className="text-xl sm:text-2xl font-extrabold mb-1">Jadwal Sound Pulang</h2>
           <p className="text-sm text-muted-foreground mb-4">Diputar otomatis setiap hari kerja Senin sampai Kamis.</p>
           <div className="grid gap-3">
             {LEAVING_SLOTS.map((k) => {
               const c = s.leaving[k];
-              const name = c.fileName ? `${LEAVING_LABELS[k]} — ${c.fileName}` : LEAVING_LABELS[k];
+              const name = c.fileName ? `${LEAVING_LABELS[k]}: ${c.fileName}` : LEAVING_LABELS[k];
               return (
-                <div key={k} className={`rounded-lg border bg-card p-4 grid gap-4 sm:grid-cols-[140px_1fr] lg:grid-cols-[minmax(0,230px)_120px_minmax(0,1fr)_auto] items-center ${c.enabled ? "" : "opacity-60"}`}>
-                  <div className="flex items-center gap-3">
+                <div key={k} className={`min-w-0 rounded-lg border bg-card p-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center ${c.enabled ? "" : "opacity-60"}`}>
+                  <div className="flex min-w-0 items-center gap-3 lg:col-span-3">
                     <Switch label={`Jadwal ${LEAVING_LABELS[k]}`} checked={c.enabled} onChange={(v) => updLeaving(k, { enabled: v })} />
                     <span className="font-bold text-lg">{LEAVING_LABELS[k]}</span>
                   </div>
-                  <input type="time" aria-label={`Jam ${LEAVING_LABELS[k]}`} value={c.time} onChange={(e) => updLeaving(k, { time: e.target.value })}
-                    className="min-w-0 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-lg font-bold" />
+                  <div className="grid min-w-0 grid-cols-2 items-end gap-3">
+                    <label className="min-w-0"><span className="mb-1 block text-sm font-semibold">Putar pertama</span>
+                      <input type="time" aria-label={`Jam ${LEAVING_LABELS[k]}`} value={c.time} onChange={(e) => updLeaving(k, { time: e.target.value })}
+                        className="min-w-0 w-full h-11 rounded-md border border-input bg-background px-2 py-2 font-mono text-base font-bold" />
+                    </label>
+                    <label className="min-w-0"><span className="mb-1 block text-sm font-semibold">Putar kedua</span>
+                      <input type="time" aria-label={`Jam kedua ${LEAVING_LABELS[k]}`} value={c.repeatTime} onChange={(e) => updLeaving(k, { repeatTime: e.target.value })}
+                        className="min-w-0 w-full h-11 rounded-md border border-input bg-background px-2 py-2 font-mono text-base font-bold" />
+                    </label>
+                    {c.repeatTime && <Button variant="ghost" className="col-span-2 h-11 text-destructive" onClick={() => updLeaving(k, { repeatTime: "" })}>Hapus waktu kedua</Button>}
+                  </div>
                   <div className="min-w-0">
                     <p className="font-semibold break-all">{c.fileName ?? "Belum ada audio"}</p>
-                    <div className="flex flex-wrap gap-3 items-center text-sm">
-                      <label className="cursor-pointer text-primary font-semibold hover:underline">
-                        {c.fileName ? "Ganti file audio" : "Pilih file audio…"}
-                        <input type="file" aria-label={`Audio ${LEAVING_LABELS[k]}`} accept="audio/*" className="hidden" onChange={(e) => onFileLeaving(k, e.target.files?.[0])} />
-                      </label>
+                    <div className="mt-2 flex flex-wrap gap-3 items-center text-sm">
+                      <FilePicker label={`Audio ${LEAVING_LABELS[k]}`} accept={AUDIO_ACCEPT} onSelect={(file) => void onFileLeaving(k, file)}>{c.fileName ? "Ganti audio" : "Pilih audio"}</FilePicker>
                       {c.fileName ? (
                         <Button variant="ghost" className="h-auto p-0 text-destructive hover:underline" onClick={async () => { try { await deleteAudio(`leaving-${k}`); updLeaving(k, { fileName: undefined, title: "Belum ada audio" }); } catch { setLog("Audio gagal dihapus. Coba kembali."); } }}>Hapus</Button>
                       ) : <span className="text-muted-foreground">(belum ada file)</span>}
                     </div>
                   </div>
-                  <Button onClick={() => void playAudio(`leaving-${k}`, name, "Test putar")} variant="secondary" className="h-12 px-5 font-bold">
+                  <Button onClick={() => void playAudio(`leaving-${k}`, name, "Test putar")} variant="secondary" className="h-11 px-5 font-bold">
                     <Play /> Test Putar
                   </Button>
                 </div>
@@ -393,16 +389,11 @@ function Index() {
           </div>
         </section>
         <section className="border-t pt-6 space-y-4">
-          <div className="flex flex-wrap justify-between gap-4 items-center">
+          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
             <h2 className="text-xl font-extrabold">Cadangan Jadwal & Audio</h2>
-            <div className="flex flex-wrap gap-3">
-              <Button disabled={!loaded || backupBusy} onClick={downloadBackup}><Download /> Unduh Cadangan</Button>
-              <Button asChild variant="outline" disabled={backupBusy}>
-                <label className={backupBusy ? "pointer-events-none opacity-50" : "cursor-pointer"}>
-                  <Upload /> Pulihkan Cadangan
-                  <input type="file" aria-label="File cadangan" accept=".zip,application/zip" className="hidden" disabled={backupBusy} onChange={(e) => { void selectBackup(e.target.files?.[0]); e.target.value = ""; }} />
-                </label>
-              </Button>
+            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+              <Button className="h-11" disabled={!loaded || backupBusy} onClick={downloadBackup}><Download /> Unduh Cadangan</Button>
+              <FilePicker label="File cadangan" accept=".zip,application/zip" disabled={backupBusy} onSelect={(file) => void selectBackup(file)}>Pulihkan Cadangan</FilePicker>
             </div>
           </div>
           <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><ShieldCheck className="h-4 w-4 shrink-0" />{backupBusy ? "Memproses cadangan…" : saved ? "Jadwal tersimpan otomatis di perangkat ini." : "Menyiapkan penyimpanan…"}</p>
@@ -415,7 +406,7 @@ function Index() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 p-4">
           <div role="dialog" aria-modal="true" aria-labelledby="restore-title" className="w-full max-w-md rounded-lg bg-card p-6 shadow-xl">
             <h3 id="restore-title" className="text-xl font-bold">Pulihkan cadangan?</h3>
-            <p className="mt-3 text-muted-foreground">Cadangan ini berisi 4 jadwal dan {Object.keys(pendingBackup.audio).length} audio. Jadwal dan audio saat ini akan diganti.</p>
+            <p className="mt-3 text-muted-foreground">Cadangan ini berisi jadwal pagi, jadwal sound pulang beserta waktu keduanya, dan {Object.keys(pendingBackup.audio).length} audio. Jadwal dan audio saat ini akan diganti.</p>
             <div className="mt-6 flex flex-wrap gap-3 justify-end">
               <Button variant="outline" disabled={backupBusy} onClick={() => setPendingBackup(null)}>Batal</Button>
               <Button disabled={backupBusy} onClick={confirmRestore}><Upload /> Pulihkan Sekarang</Button>
@@ -427,7 +418,7 @@ function Index() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 p-4" onClick={() => setGuide(false)}>
           <div className="max-w-md w-full max-h-[90dvh] overflow-y-auto rounded-lg bg-card p-6 sm:p-8 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-2xl font-extrabold mb-5">Panduan Singkat</h3>
-            {["Hubungkan speaker bluetooth ke komputer.", "Pilih lagu & jam untuk setiap hari, lalu klik \"Aktifkan Jadwal Otomatis\".", "Biarkan tab ini tetap terbuka (boleh di-minimize)."].map((t, i) => (
+            {["Hubungkan speaker bluetooth ke perangkat.", "Pilih lagu & jam untuk setiap hari, lalu klik \"Aktifkan Jadwal Otomatis\".", "Biarkan aplikasi tetap terbuka dan layar menyala."].map((t, i) => (
               <div key={i} className="flex gap-4 mb-4">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary font-bold text-primary-foreground">{i + 1}</span>
                 <p className="pt-1.5 font-medium">{t}</p>
@@ -453,8 +444,8 @@ function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: 
 
 function Toggle({ label, hint, checked, onChange }: { label: string; hint: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <div><p className="font-semibold">{label}</p><p className="text-xs text-muted-foreground">{hint}</p></div>
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+      <div className="min-w-0"><p className="font-semibold">{label}</p><p className="text-xs text-muted-foreground">{hint}</p></div>
       <Switch label={label} checked={checked} onChange={onChange} />
     </div>
   );

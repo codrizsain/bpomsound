@@ -1,4 +1,7 @@
 # Tasks
+- [ ] Tidy mobile header, controls and audio selection in the installed app; remove dash separators from interface text.
+- [ ] Add a configurable second playback time per leaving sound and preserve both times in offline storage and backups.
+- [ ] Verify phone layouts, file selection, repeat scheduling and offline data flows.
 - [x] Add two daily leaving sounds (Sound Peringatan Pulang 15:55 and Sound Pulang 16:00, Senin–Kamis) with per-slot audio upload, Test Putar, and inclusion in offline backup/restore.
 - [x] Remove remaining white corner pixels while preserving the blue sound logo and replace cached website/PWA icon URLs.
 - [x] Remove the sound icon's white outer background and use it in the header and website/app icons.
