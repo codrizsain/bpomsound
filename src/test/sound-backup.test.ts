@@ -34,10 +34,12 @@ describe("Offline backup", () => {
   it("includes the two leaving sounds in the archive", async () => {
     const bytes = new Uint8Array([80, 85, 76, 65, 78, 71]);
     vi.mocked(getAudio).mockImplementation(async (key) => key === "leaving-warn" ? new Blob([bytes], { type: "audio/mpeg" }) : undefined);
-    const s = normalizeSettings({ leaving: { warn: { time: "15:50", fileName: "Peringatan Pulang.mp3" } } });
+    const s = normalizeSettings({ leaving: { warn: { time: "15:50", repeatTime: "15:58", fileName: "Peringatan Pulang.mp3" }, out: { repeatTime: "16:05" } } });
     const archive = await createBackup(s);
     const restored = await readBackup(new Blob([new Uint8Array(archive)]));
     expect(restored.settings.leaving.warn.time).toBe("15:50");
+    expect(restored.settings.leaving.warn.repeatTime).toBe("15:58");
+    expect(restored.settings.leaving.out.repeatTime).toBe("16:05");
     expect(restored.settings.leaving.warn.fileName).toBe("Peringatan Pulang.mp3");
     const audio = restored.audio["leaving-warn"];
     expect(audio).toBeDefined();
