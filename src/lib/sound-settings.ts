@@ -6,7 +6,8 @@ export const LEAVING_LABELS: Record<LeavingKey, string> = { warn: "Sound Peringa
 export const SETTINGS_KEY = "bpom-sound-settings";
 export type DayCfg = { enabled: boolean; time: string; title: string; fileName?: string | undefined };
 export type SlotCfg = DayCfg;
-export type Settings = { active: boolean; volume: number; keepAlive: boolean; wakeLock: boolean; days: Record<number, DayCfg>; leaving: Record<LeavingKey, SlotCfg> };
+export type LeavingCfg = SlotCfg & { repeatTime: string };
+export type Settings = { active: boolean; volume: number; keepAlive: boolean; wakeLock: boolean; days: Record<number, DayCfg>; leaving: Record<LeavingKey, LeavingCfg> };
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 function normSlot(c: unknown, defTime: string): SlotCfg {
@@ -21,8 +22,12 @@ function normSlot(c: unknown, defTime: string): SlotCfg {
 export const DEFAULTS: Settings = {
   active: false, volume: 0.8, keepAlive: true, wakeLock: false,
   days: Object.fromEntries(ORDER.map((day) => [day, { enabled: true, time: "10:00", title: "Belum ada audio" }])),
-  leaving: { warn: { enabled: true, time: "15:55", title: "Belum ada audio" }, out: { enabled: true, time: "16:00", title: "Belum ada audio" } },
+  leaving: { warn: { enabled: true, time: "15:55", repeatTime: "", title: "Belum ada audio" }, out: { enabled: true, time: "16:00", repeatTime: "", title: "Belum ada audio" } },
 };
+function normLeaving(c: unknown, defTime: string): LeavingCfg {
+  const value = c && typeof c === "object" ? c as Partial<LeavingCfg> : {};
+  return { ...normSlot(c, defTime), repeatTime: typeof value.repeatTime === "string" && TIME_RE.test(value.repeatTime) ? value.repeatTime : "" };
+}
 export function normalizeSettings(value: unknown): Settings {
   const p = value && typeof value === "object" ? value as Partial<Settings> : {};
   return {
@@ -31,6 +36,6 @@ export function normalizeSettings(value: unknown): Settings {
     keepAlive: typeof p.keepAlive === "boolean" ? p.keepAlive : true,
     wakeLock: p.wakeLock === true,
     days: Object.fromEntries(ORDER.map((day) => [day, normSlot(p.days?.[day], "10:00")])),
-    leaving: { warn: normSlot(p.leaving?.warn, "15:55"), out: normSlot(p.leaving?.out, "16:00") },
+    leaving: { warn: normLeaving(p.leaving?.warn, "15:55"), out: normLeaving(p.leaving?.out, "16:00") },
   };
 }
