@@ -4,6 +4,7 @@ import { saveAudio, getAudio, deleteAudio } from "@/lib/audio-db";
 import { registerAppSW } from "@/lib/sw-register";
 import { Button } from "@/components/ui/button";
 import { FilePicker, AUDIO_ACCEPT } from "@/components/file-picker";
+import { AppVersion } from "@/components/app-version";
 import { dueSoundJobs } from "@/lib/sound-schedule";
 import { Download, Upload, Play, Square, Pause, HelpCircle, ShieldCheck } from "lucide-react";
 import { DAYS, ORDER, DEFAULTS, LEAVING_LABELS, LEAVING_SLOTS, SETTINGS_KEY as LS, normalizeSettings, type Settings, type DayCfg, type LeavingCfg, type LeavingKey } from "@/lib/sound-settings";
@@ -253,6 +254,7 @@ function Index() {
           <div className="min-w-0">
             <p className="hidden text-xs uppercase opacity-80 sm:block">Badan Pengawas Obat dan Makanan</p>
             <h1 className="text-base sm:text-2xl md:text-[28px] leading-snug font-extrabold">Sistem Sound Otomatis Kantor BPOM Tanjung Balai</h1>
+            <AppVersion />
             {offline && (
               <p role="status" className="mt-1.5 inline-flex items-center gap-2 text-xs font-semibold">
                 <span className="h-2 w-2 shrink-0 rounded-full bg-success" />

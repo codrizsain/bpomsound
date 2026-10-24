@@ -1,4 +1,5 @@
 # Tasks
+- [ ] Display the current app version and retrospective change history from version 1.0; verify opening and reading the history on phone and desktop.
 - [ ] Tidy mobile header, controls and audio selection in the installed app; remove dash separators from interface text.
 - [ ] Add a configurable second playback time per leaving sound and preserve both times in offline storage and backups.
 - [ ] Verify phone layouts, file selection, repeat scheduling and offline data flows.
