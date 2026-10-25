@@ -42,6 +42,19 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
+  // A stale code-split chunk (after an app update) fails with "Failed to fetch
+  // dynamically imported module". Reload once to fetch the current module graph
+  // instead of leaving a blank screen; the timestamp guard prevents reload loops.
+  useEffect(() => {
+    if (!String((error as Error)?.message ?? error).includes("dynamically imported module")) return;
+    try {
+      const last = Number(sessionStorage.getItem("chunk-reload-at") ?? 0);
+      if (Date.now() - last < 15000) return;
+      sessionStorage.setItem("chunk-reload-at", String(Date.now()));
+      window.location.reload();
+    } catch {}
+  }, [error]);
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
