@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 
 // Retrospective milestones from the app's development history, not dated releases.
 const VERSIONS = [
+  { version: "1.9", title: "Pemeriksaan menyeluruh aplikasi dan mode offline", changes: ["Aplikasi yang sudah terpasang diuji tanpa internet: halaman, jam, jadwal mingguan, jadwal sound pulang, dan cadangan tetap berfungsi penuh.", "Tampilan ponsel diperiksa kembali agar rapi tanpa geser ke samping.", "Riwayat versi dipastikan dapat dibuka dan ditutup dengan lancar, termasuk saat offline."] },
   { version: "1.8", title: "Status versi dan riwayat aplikasi", changes: ["Nomor versi tampil di bagian atas aplikasi.", "Riwayat perubahan sejak versi 1.0 dapat dibuka dari tombol versi dan tersedia tanpa internet pada aplikasi yang sudah tersimpan offline."] },
   { version: "1.7", title: "Tampilan ponsel dan dua waktu putar", changes: ["Header dan menu dirapikan untuk ponsel serta aplikasi terpasang.", "Pilihan audio menggunakan pemilih file yang dapat disentuh langsung.", "Masing masing sound pulang memiliki waktu putar pertama dan kedua dengan satu file audio.", "Kedua waktu disimpan di perangkat dan ikut dalam cadangan. Alur data dan penggunaan offline telah diuji."] },
   { version: "1.6", title: "Jadwal sound pulang", changes: ["Sound Peringatan Pulang ditambahkan dengan waktu awal 15:55.", "Sound Pulang ditambahkan dengan waktu awal 16:00.", "Keduanya berjalan setiap Senin sampai Kamis, memiliki pilihan audio dan Test Putar, serta ikut dalam cadangan."] },
